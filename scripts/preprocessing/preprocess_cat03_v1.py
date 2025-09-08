@@ -10,6 +10,8 @@ import os
 import _pickle as pickle
 import logging
 import sys
+import matplotlib.cm as cm
+import matplotlib.colors as mcolors
 
 # %%
 # --- setup logger -- these give more info than print statements
@@ -178,8 +180,12 @@ for name in ds_names:
         return refined_tx
     
     def plot_aligned_win(ax, tx, data, pre_idx, post_idx, title=None):
-        for t in tx:
+        cmap = cm.get_cmap('viridis', len(tx)) 
+        norm = mcolors.Normalize(vmin=0, vmax=len(tx) - 1)  
+        
+        for i, t in enumerate(tx):
             win = data.values[t-pre_idx:t+post_idx]
+            color = cmap(norm(i))  
             ax.plot(win, label = f"Index: {t}")        
         if title is not None:
             ax.set_title(title)
@@ -228,7 +234,7 @@ for name in ds_names:
 
    # Remove index 19562 for cat03_037
     if name == 'cat03_037':
-        remove_indices = [19562, 18164, 16694]  # Add all indices you want to remove
+        remove_indices = [29627]  # Add all indices you want to remove
         print("Before removal:")
         print("refined_on_l:", refined_on_l)
         print("refined_off_l:", refined_off_l)
