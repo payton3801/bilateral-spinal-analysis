@@ -28,16 +28,16 @@ base_path = "/snel/share/share/derived/auyong/NWB/"
 nwb_cache_dir = f"/snel/share/share/tmp/scratch/pbechef/bilateral_cat/cat03/preprocessed/" 
 
 
-ds_names = ['cat03_037', 'cat03_039', 'cat03_041', 'cat03_043', 'cat03_045', 'cat03_047', 
-           'cat03_051', 'cat03_053', 'cat03_055', 'cat03_057', 'cat03_059', 'cat03_061',
-           'cat03_013', 'cat03_025', 'cat03_049']
+ds_names = ['cat03_037', 'cat03_039'] #, 'cat03_041', 'cat03_043', 'cat03_045', 'cat03_047', 
+           #'cat03_051', 'cat03_053', 'cat03_055', 'cat03_057', 'cat03_059', 'cat03_061',
+           #'cat03_013', 'cat03_049'] #cat03_025 being a pain
 
 #saving this preprocessed data
 if not os.path.exists(nwb_cache_dir):
     os.makedirs(nwb_cache_dir)
 
-env_emg_gauss_width_ms = 200  # ms
-gauss_width_ms = 100  # ms
+env_emg_gauss_width_ms = 100  # ms
+gauss_width_ms = 50  # ms
 spk_gauss_width_ms = 30 # ms
 emg_name = 'emg'
 spk_name = 'spikes'
@@ -45,7 +45,7 @@ spk_name = 'spikes'
 smth_emg_field = f"{emg_name}_smooth_{gauss_width_ms}ms"
 envl_emg_field = f"{emg_name}_smooth_{env_emg_gauss_width_ms}ms"
 emg_field = smth_emg_field
-smth_spk_name = f"{spk_name}_smooth_{spk_gauss_width_ms}ms"
+#smth_spk_name = f"{spk_name}_smooth_{spk_gauss_width_ms}ms"
 
 # %%
 def compute_on_off_events(ds, musc_name_right , pos_threshold=0.025, neg_threshold=0.03):
@@ -124,9 +124,13 @@ def compute_on_off_events(ds, musc_name_right , pos_threshold=0.025, neg_thresho
 
     return np.array(onsets), np.array(offsets), debug_pkg
 
-# %%
 
-pre_idx=400
+# %%
+## need to figure out why alignment is not working, could be refinement values or threshold 
+# breaks on second iteration
+# we decreased smoothing
+
+pre_idx=800
 post_idx=700
 
 for name in ds_names:
@@ -147,16 +151,27 @@ for name in ds_names:
     l_ext_on, l_ext_off, l_ext_db_pkg = compute_on_off_events(dataset, musc_name_left, pos_threshold=0.001, neg_threshold=0.001)
 
     def refine_tx(tx, data, threshold, pre_idx, post_idx, tx_type="onset"):
-        """refine onset/offset calculation"""
+        """refine onset/offset calculation"""        
         refined_tx = np.zeros_like(tx)
+        data_len = len(data.values)
         for i, idx in enumerate(tx):
+
             win = data.values[idx-pre_idx:idx+post_idx]
+            start_idx = max(0, idx- pre_idx)
+            end_idx = (data_len, post_idx + idx)
+            if len(win) < pre_idx + post_idx:
+                raise ValueError("window size too small for index {idx}. fix pre or post idx")
+
             if tx_type == "onset":
-                cross_idx = np.where(np.diff(np.sign(win-threshold)) > 0)[0][0]
+                cross_pts = np.where(np.diff(np.sign(win-threshold)) > 0)[0]
             elif tx_type == "offset":
-                cross_idx = np.where(np.diff(np.sign(win-threshold)) < 0)[0][0]
+                cross_pts = np.where(np.diff(np.sign(win-threshold)) < 0)[0]
             else:
                 raise NotImplementedError("tx_type must be onset or offset")
+            
+            if len(cross_pts) == 0:
+                raise ValueError(f"No crossing point found for index {idx} of {name}, check threshold {threshold} and window min {np.min(win)}")
+            cross_idx = cross_pts[0]
             shift = cross_idx - pre_idx
             refined_tx[i] = tx[i] + shift
         
@@ -165,36 +180,71 @@ for name in ds_names:
     def plot_aligned_win(ax, tx, data, pre_idx, post_idx, title=None):
         for t in tx:
             win = data.values[t-pre_idx:t+post_idx]
-            ax.plot(win)        
+            ax.plot(win, label = f"Index: {t}")        
         if title is not None:
             ax.set_title(title)
     # Create subplots
+        ax.legend(loc = "upper right", fontsize = "small")
     fig, axes = plt.subplots(2, 2, figsize=(16, 12), dpi=150)
 
-    # -- refine onsets -- left 
-    if name in ['cat03_37', 'cat03_043', 'cat03_047', 'cat03_053', 'cat03_055', 'cat03_057', 'cat03_013']:
-        threshold = 0.3
+   ## -- refine onsets -- left 
+    if name in ['cat03_039', 'cat03_043', "cat03_013"]:
+        threshold = 0.4
+    elif name == 'cat03_025':
+        threshold = 1.1
+
     else:
-        threshold = 0.2    
+        threshold = 0.2  
+  
     refined_on_l = refine_tx(l_ext_on, l_ext_db_pkg['data'], threshold, pre_idx, post_idx, tx_type="onset")
+
     # -- refine onsets -- right
-    if name == 'cat03_043':
+    if name == 'cat03_037':
+        threshold = 0.5
+    if name == 'cat03_039':
         threshold = 0.3
-    elif name in ['cat03_061', 'cat03_025']:
-        threshold = 0.1
+    elif name in ['cat03_043', 'cat03_025']:
+        threshold = 0.15
+    elif name == "cat03_013":
+        threshold = 0.4
+    
     else:
-        threshold = 0.2
+        threshold = 0.3
     refined_on_r = refine_tx(r_ext_on, r_ext_db_pkg['data'], threshold, pre_idx, post_idx, tx_type="onset")
 
-    threshold = 0.2
-    # -- refine offsets -- left     
+    # -- refine offsets -- left    
+    if name == 'cat03_039':
+        threshold = 0.3
+    elif name in ['cat03_043', 'cat03_025']:
+        threshold = 0.3
+    elif name == "cat03_013":
+        threshold = 0.4
+    else:
+        threshold = 0.2
     #break
     refined_off_l = refine_tx(l_ext_off, l_ext_db_pkg['data'], threshold, pre_idx, post_idx, tx_type="offset")
     # -- refine offsets -- right 
     refined_off_r = refine_tx(r_ext_off, r_ext_db_pkg['data'], threshold, pre_idx, post_idx, tx_type="offset")
 
-    plot_aligned_win(axes[0,0], refined_on_l, l_ext_db_pkg['data'], pre_idx, post_idx, title=f"{name} R Onset")
-    plot_aligned_win(axes[0,1], refined_on_r, r_ext_db_pkg['data'], pre_idx, post_idx, title=f"{name} L Onset")
+   # Remove index 19562 for cat03_037
+    if name == 'cat03_037':
+        remove_indices = [19562, 18164, 16694]  # Add all indices you want to remove
+        print("Before removal:")
+        print("refined_on_l:", refined_on_l)
+        print("refined_off_l:", refined_off_l)
+        
+        # Create a mask to exclude the indices
+        mask = ~np.isin(refined_on_l, remove_indices)
+        refined_on_l = refined_on_l[mask]
+        refined_off_l = refined_off_l[mask]
+        
+        print("After removal:")
+        print("refined_on_l:", refined_on_l)
+        print("refined_off_l:", refined_off_l)
+
+
+    plot_aligned_win(axes[0,0], refined_on_l, l_ext_db_pkg['data'], pre_idx, post_idx, title=f"{name} L Onset")
+    plot_aligned_win(axes[0,1], refined_on_r, r_ext_db_pkg['data'], pre_idx, post_idx, title=f"{name} R Onset")
     plot_aligned_win(axes[1,0], refined_off_l, l_ext_db_pkg['data'], pre_idx, post_idx, title=f"{name} L Offset")
     plot_aligned_win(axes[1,1], refined_off_r, r_ext_db_pkg['data'], pre_idx, post_idx, title=f"{name} R Offset")
     
@@ -231,4 +281,21 @@ for name in ds_names:
     with open(pkl_save_path, 'wb') as f:
         logger.info(f"Saving {pkl_save_path} to pickle.")
         pickle.dump(dataset, f)
+# %%
+#checking error threshold crossing messages
+pre_idx=700
+post_idx=700
+
+idx = 18164
+win = r_ext_db_pkg['data'].values[idx-pre_idx:idx+post_idx]
+
+plt.figure(figsize=(10,4))
+plt.plot(win, label="EMG window")
+plt.axhline(0.2, color='r', linestyle='--', label="Threshold")
+plt.title(f"{name} window around index {idx}")
+plt.legend()
+plt.show()
+
+print("Window min:", np.min(win), "Window max:", np.max(win))
+
 # %%
