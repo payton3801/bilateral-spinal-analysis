@@ -30,9 +30,9 @@ base_path = "/snel/share/share/derived/auyong/NWB/"
 nwb_cache_dir = f"/snel/share/share/tmp/scratch/pbechef/bilateral_cat/cat03/preprocessed/" 
 
 
-ds_names = ['cat03_037', 'cat03_039'] #, 'cat03_041', 'cat03_043', 'cat03_045', 'cat03_047', 
-           #'cat03_051', 'cat03_053', 'cat03_055', 'cat03_057', 'cat03_059', 'cat03_061',
-           #'cat03_013', 'cat03_049'] #cat03_025 being a pain
+ds_names = ['cat03_037', 'cat03_039', 'cat03_041', 'cat03_043', 'cat03_045', 'cat03_047', 
+           'cat03_051', 'cat03_053', 'cat03_055', 'cat03_057', 'cat03_059', 'cat03_061',
+           'cat03_013', 'cat03_049',]  #cat03_025 being a pain
 
 #saving this preprocessed data
 if not os.path.exists(nwb_cache_dir):
@@ -212,7 +212,7 @@ for name in ds_names:
     elif name in ['cat03_043', 'cat03_025']:
         threshold = 0.15
     elif name == "cat03_013":
-        threshold = 0.4
+        threshold = 0.3
     
     else:
         threshold = 0.3
@@ -232,21 +232,76 @@ for name in ds_names:
     # -- refine offsets -- right 
     refined_off_r = refine_tx(r_ext_off, r_ext_db_pkg['data'], threshold, pre_idx, post_idx, tx_type="offset")
 
-   # Remove index 19562 for cat03_037
-    if name == 'cat03_037':
-        remove_indices = [29627]  # Add all indices you want to remove
-        print("Before removal:")
-        print("refined_on_l:", refined_on_l)
-        print("refined_off_l:", refined_off_l)
+  # indices removal
+    indices_to_remove = {
+        'cat03_037': {
+        'left':[29627],
+        'right':[21745, 24182], 
+        },
+        'cat03_039': {
+        'left':[7516],
+        'right':[19415], 
+        },
+        'cat03_041': {
+        'left':[10691, 24696],
+        },
+        'cat03_045': {
+        'left':[13604, 35428, 16180, 26286],
+        'right':[20402, 15618, 19288], 
+        },
+        'cat03_047': {
+        'right':[16110, 12947, 24067], 
+        },
+        'cat03_051': {
+        'right':[16800], 
+        },
+        'cat03_053': {
+        'left':[27205, 11736, 17929, 22684],
+        'right':[13816, 26456 ], 
+        },
+        'cat03_055': {
+        'left':[11447, 13249, 12666],
+        'right':[16193], 
+        },
+        'cat03_057': {
+        'left':[15288],
+        'right':[17341 ], 
+        },
+        'cat03_059': {
+        'left':[27205],
+        'right':[21412, 16172, 16230], 
+        },
+        'cat03_061': {
+        'left':[20895],
+        'right':[14045, 15375, 27091 ], 
+        },
+        'cat03_013': {
+        'left':[11637],
+        },
+        'cat03_049': {
+        'left':[14211, 13800, 11749, 18774, 25060],
+        'right':[9394, 14953, 16271, 12462, 18484, 23241 ], 
+        },
+    }
+
         
-        # Create a mask to exclude the indices
-        mask = ~np.isin(refined_on_l, remove_indices)
-        refined_on_l = refined_on_l[mask]
-        refined_off_l = refined_off_l[mask]
+    if name in indices_to_remove:
+        remove_indices_left = indices_to_remove[name].get('left', [])
+        remove_indices_right = indices_to_remove[name].get('right', [])
+        remove_indices = indices_to_remove[name]
+
+        mask_on_l = ~np.isin(refined_on_l, remove_indices_left)
+        mask_off_l = ~np.isin(refined_off_l, remove_indices_left)
         
-        print("After removal:")
-        print("refined_on_l:", refined_on_l)
-        print("refined_off_l:", refined_off_l)
+        # Apply the masks to remove the indices for left side
+        refined_on_l = refined_on_l[mask_on_l]
+        refined_off_l = refined_off_l[mask_off_l]
+        
+        mask_on_r = ~np.isin(refined_on_r, remove_indices_right)
+        mask_off_r = ~np.isin(refined_off_r, remove_indices_right)
+        
+        refined_on_r = refined_on_r[mask_on_r]
+        refined_off_r = refined_off_r[mask_off_r]
 
 
     plot_aligned_win(axes[0,0], refined_on_l, l_ext_db_pkg['data'], pre_idx, post_idx, title=f"{name} L Onset")
@@ -287,21 +342,46 @@ for name in ds_names:
     with open(pkl_save_path, 'wb') as f:
         logger.info(f"Saving {pkl_save_path} to pickle.")
         pickle.dump(dataset, f)
+
 # %%
-#checking error threshold crossing messages
-pre_idx=700
-post_idx=700
+## plotting flexor and extensor muscle plots
+for name in ds_names:
+    
+    save_filename = f"{name}_preproc.pkl"
+    pkl_save_path = os.path.join(nwb_cache_dir, save_filename)
 
-idx = 18164
-win = r_ext_db_pkg['data'].values[idx-pre_idx:idx+post_idx]
+    with open(pkl_save_path, 'rb') as f:
+        dataset = pickle.load(f)
 
-plt.figure(figsize=(10,4))
-plt.plot(win, label="EMG window")
-plt.axhline(0.2, color='r', linestyle='--', label="Threshold")
-plt.title(f"{name} window around index {idx}")
-plt.legend()
-plt.show()
+    ext = dataset.data[emg_field]["RBA"].values
+    flex = dataset.data[emg_field]["LSL"].values
 
-print("Window min:", np.min(win), "Window max:", np.max(win))
+    refined_on_r = [dataset.data.index.get_loc(ts) for ts in dataset.r_trial_info['ext_start_time'].values]
+    refined_off_r = [dataset.data.index.get_loc(ts) for ts in dataset.r_trial_info['ext_stop_time'].values]
+
+    flex_shift = ext + 2
+    x = np.arange(len(ext))
+
+
+    plt.figure(figsize=(12,5))
+    plt.plot(x, ext, color="orange", label = "extensor")
+    plt.plot(x, flex + flex_shift, color = "blue", label = "flexor")
+
+    on_x = [ix for ix in refined_on_r if 0 <= ix < len(x)]
+    off_x = [ix for ix in refined_off_r if 0 <= ix < len(x)]
+
+    plt.vlines(on_x, ymin = np.nanmin(ext), ymax= np.nanmax(flex + flex_shift), color = "g", linestyle = "--", alpha = 0.6, label = "Onset")
+    plt.vlines(off_x, ymin = np.nanmin(ext), ymax = np.nanmax(flex + flex_shift), color = "b", linestyle = "--", alpha = 0.6, label = "Offset")
+
+    plt.title(f"{name} Muscle activity w/ onset and offset")
+    plt.xlabel("Time")
+    plt.ylabel("Amplitude")
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
+
+
+
+    
 
 # %%
