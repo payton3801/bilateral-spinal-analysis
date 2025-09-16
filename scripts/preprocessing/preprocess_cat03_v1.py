@@ -5,6 +5,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import scipy.signal as signal
+from scipy import signal
+
 import glob
 import os
 import _pickle as pickle
@@ -180,13 +182,12 @@ for name in ds_names:
         return refined_tx
     
     def plot_aligned_win(ax, tx, data, pre_idx, post_idx, title=None):
-        cmap = cm.get_cmap('viridis', len(tx)) 
-        norm = mcolors.Normalize(vmin=0, vmax=len(tx) - 1)  
+        cmap = cm.get_cmap('rainbow', len(tx))  
         
         for i, t in enumerate(tx):
             win = data.values[t-pre_idx:t+post_idx]
-            color = cmap(norm(i))  
-            ax.plot(win, label = f"Index: {t}")        
+            color = cmap(i)   # pick distinct color
+            ax.plot(win, color=color, label=f"Index: {t}")      
         if title is not None:
             ax.set_title(title)
     # Create subplots
@@ -207,21 +208,17 @@ for name in ds_names:
     # -- refine onsets -- right
     if name == 'cat03_037':
         threshold = 0.5
-    if name == 'cat03_039':
-        threshold = 0.3
     elif name in ['cat03_043', 'cat03_025']:
         threshold = 0.15
     elif name == "cat03_013":
-        threshold = 0.3
+        threshold = 0.4
     
     else:
         threshold = 0.3
     refined_on_r = refine_tx(r_ext_on, r_ext_db_pkg['data'], threshold, pre_idx, post_idx, tx_type="onset")
 
     # -- refine offsets -- left    
-    if name == 'cat03_039':
-        threshold = 0.3
-    elif name in ['cat03_043', 'cat03_025']:
+    if name in ['cat03_039', 'cat03_043', 'cat03_025']:
         threshold = 0.3
     elif name == "cat03_013":
         threshold = 0.4
@@ -236,7 +233,7 @@ for name in ds_names:
     indices_to_remove = {
         'cat03_037': {
         'left':[29627],
-        'right':[21745, 24182], 
+        'right':[21834, 16832], 
         },
         'cat03_039': {
         'left':[7516],
@@ -246,41 +243,41 @@ for name in ds_names:
         'left':[10691, 24696],
         },
         'cat03_045': {
-        'left':[13604, 35428, 16180, 26286],
-        'right':[20402, 15618, 19288], 
+        'left':[34052],
+        'right':[34771], 
         },
         'cat03_047': {
-        'right':[16110, 12947, 24067], 
+        'right':[16110, 24067], 
         },
         'cat03_051': {
-        'right':[16800], 
+        'right':[21493], 
         },
         'cat03_053': {
-        'left':[27205, 11736, 17929, 22684],
-        'right':[13816, 26456 ], 
+        'left':[27205, 22684, 17929],
+        'right':[24299], 
         },
         'cat03_055': {
-        'left':[11447, 13249, 12666],
-        'right':[16193], 
+        'left':[11447],
+        'right':[26498], 
         },
         'cat03_057': {
-        'left':[15288],
-        'right':[17341 ], 
+        'left':[17199],
+        'right':[ 30934], 
         },
         'cat03_059': {
-        'left':[27205],
-        'right':[21412, 16172, 16230], 
+        'left':[11295, 14552],
+        'right':[16230, 16172], 
         },
         'cat03_061': {
         'left':[20895],
-        'right':[14045, 15375, 27091 ], 
+        'right':[15375, 27091], 
         },
         'cat03_013': {
         'left':[11637],
         },
         'cat03_049': {
-        'left':[14211, 13800, 11749, 18774, 25060],
-        'right':[9394, 14953, 16271, 12462, 18484, 23241 ], 
+        'left':[25060],
+        'right':[18550, 18230, 24546, 18484], 
         },
     }
 
