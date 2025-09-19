@@ -5,6 +5,9 @@ import _pickle as pickle
 import logging
 import sys
 import numpy as np
+from snel_toolkit.datasets.nwb import NWBDataset
+from snel_toolkit.datasets.base import DataWrangler
+
 
 # %% -- logger setup
 # --- setup logger -- these give more info than print statements
@@ -35,6 +38,13 @@ for ds_path in ds_paths:
         dataset = pickle.load(file)
         all_ds.append(dataset)
 
+dw = DataWrangler(dataset)
+
+side = "left"
+if side == "left":
+    if dw._t_df is None:
+        dw._t_df = dataset.l_trial_info
+        dw._t_df['align_time'] = dw._t_df['ext_start_time']
 
 # %%
 debug = True
@@ -148,23 +158,19 @@ def fit_session_readins(all_avg, all_means, global_pcs, fit_ix, l2_scale=0):
 
 # === end FUNCTION DEFINITIONS ==========================
 
-# %%
-
-spk_gauss_width_ms = 30 # ms
-emg_gauss_width_ms = 30 # ms
-emg_name = 'emg'
-spk_name = 'spikes'
-
-smth_spk_name = f"{spk_name}_smooth_{spk_gauss_width_ms}ms"
-smth_emg_name = f"{emg_name}_smooth_{emg_gauss_width_ms}ms"
 
 # %%
-env_emg_gauss_width_ms = 100  # ms
+
+emg_gauss_width_ms = 100  # ms
 gauss_width_ms = 50  # ms
 spk_gauss_width_ms = 30 # ms
 emg_name = 'emg'
 spk_name = 'spikes'
+spk_names = dataset.data.spikes.columns.values
+spk_field = "spikes"
 
+smth_spk_name = f"{spk_name}_smooth_{spk_gauss_width_ms}ms"
+smth_emg_name = f"{emg_name}_smooth_{emg_gauss_width_ms}ms"
 
 ################ step 1: Standardize (zero-mean)
 spk_cycle_avg, _ = aligned_cycle_averaging(
