@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import scipy.signal as signal
 from scipy import signal
+from snel_toolkit.datasets.base import DataWrangler
 
 import glob
 import os
@@ -340,6 +341,7 @@ for name in ds_names:
         logger.info(f"Saving {pkl_save_path} to pickle.")
         pickle.dump(dataset, f)
 
+
 # %%
 ## plotting flexor and extensor muscle plots
 for name in ds_names:
@@ -377,8 +379,5 @@ for name in ds_names:
     plt.tight_layout()
     plt.show()
 
-
-
-    
 
 # %%
