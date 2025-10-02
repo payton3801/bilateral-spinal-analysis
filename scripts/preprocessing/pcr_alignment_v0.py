@@ -15,7 +15,10 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 import matplotlib.cm as colormap
 from sklearn.decomposition import PCA
+import plotly.graph_objects as go
 
+
+#use plotly for 3d interactive
 
 
 # %% -- logger setup
@@ -358,8 +361,8 @@ if debug:
 
     cm = colormap.Dark2
 
-    plot_pcs(ax, global_spk_pcs, label="Global", color="k", linewidth=2)
-    plot_pcs(ax2, global_emg_pcs, label="Global", color="k", linewidth=2)
+    plot_pcs(ax, global_spk_pcs, label="Global", color="k", linewidth=2, zorder=4)
+    plot_pcs(ax2, global_emg_pcs, label="Global", color="k", linewidth=2, zorder=4)
     for i, (
         sess_id,
         sess_spk_avg,
@@ -387,22 +390,22 @@ if debug:
         session_color = cm(float(i) / len(session_ids))
         
         sess_spk_cycle_pcs = np.matmul(sess_spk_avg[spk_fit_ix, :], W_spk) + b_spk
-        plot_pcs(ax, sess_spk_cycle_pcs, label=f"{sess_id} Avg", color=session_color, linewidth=2.5, alpha=0.9)
+        plot_pcs(ax, sess_spk_cycle_pcs, label=f"{sess_id} Avg", color=session_color, linewidth=2.5, alpha=0.3)
         
-        for trial_idx in range(sess_spk_data.shape[2]):
-            trial_activity = sess_spk_data[:, :, trial_idx]
-            if not np.all(np.isnan(trial_activity)):
-                trial_pcs = np.matmul(trial_activity[spk_fit_ix, :], W_spk) + b_spk
-                plot_pcs(ax, trial_pcs, color=session_color, linewidth=0.5, alpha=0.1)
+        #for trial_idx in range(sess_spk_data.shape[2]):
+        #     trial_activity = sess_spk_data[:, :, trial_idx]
+        #     if not np.all(np.isnan(trial_activity)):
+        #         trial_pcs = np.matmul(trial_activity[spk_fit_ix, :], W_spk) + b_spk
+        #         plot_pcs(ax, trial_pcs, color=session_color, linewidth=0.5, alpha=0.1)
         
         sess_emg_cycle_pcs = np.matmul(sess_emg_avg[emg_fit_ix, :], W_emg) + b_emg
-        plot_pcs(ax2, sess_emg_cycle_pcs, label=f"{sess_id} Avg", color=session_color, linewidth=2.5, alpha=0.9)
+        plot_pcs(ax2, sess_emg_cycle_pcs, label=f"{sess_id} Avg", color=session_color, linewidth=2.5, alpha=0.3)
         
-        for trial_idx in range(sess_emg_data.shape[2]):
-            trial_activity = sess_emg_data[:, :, trial_idx]
-            if not np.all(np.isnan(trial_activity)):
-                trial_pcs = np.matmul(trial_activity[emg_fit_ix, :], W_emg) + b_emg
-                plot_pcs(ax2, trial_pcs, color=session_color, linewidth=0.5, alpha=0.1)
+        # for trial_idx in range(sess_emg_data.shape[2]):
+        #     trial_activity = sess_emg_data[:, :, trial_idx]
+        #     if not np.all(np.isnan(trial_activity)):
+        #         trial_pcs = np.matmul(trial_activity[emg_fit_ix, :], W_emg) + b_emg
+        #         plot_pcs(ax2, trial_pcs, color=session_color, linewidth=0.5, alpha=0.1)
 
     #ax.legend()
     ax.set_xlabel("PC1"); ax.set_ylabel("PC2"); ax.set_zlabel("PC3")
@@ -426,4 +429,93 @@ if debug:
     plt.show()
 
 
+# %%
+#### plotting the interactive plots with plotly
+import plotly.graph_objects as go
+
+if debug:
+### spikes plot
+    fig_spikes = go.Figure()
+
+    # Plot global spikes
+    fig_spikes.add_trace(
+        go.Scatter3d(
+            x=global_spk_pcs[:, 0],
+            y=global_spk_pcs[:, 1],
+            z=global_spk_pcs[:, 2],
+            mode="lines",
+            line=dict(color="black", width=4),
+            name="Global Spikes",
+        )
+    )
+
+    # Plot session-specific spikes
+    for i, (sess_id, sess_spk_avg, W_spk, b_spk) in enumerate(
+        zip(session_ids, all_spk_cycle_avg, all_spk_W, all_spk_b)
+    ):
+        session_color = f"rgba({i * 50 % 255}, {i * 100 % 255}, {i * 150 % 255}, 0.7)"
+        sess_spk_cycle_pcs = np.matmul(sess_spk_avg[spk_fit_ix, :], W_spk) + b_spk
+
+        fig_spikes.add_trace(
+            go.Scatter3d(
+                x=sess_spk_cycle_pcs[:, 0],
+                y=sess_spk_cycle_pcs[:, 1],
+                z=sess_spk_cycle_pcs[:, 2],
+                mode="lines",
+                line=dict(color=session_color, width=2),
+                name=f"{sess_id} Avg Spikes",
+            )
+        )
+
+
+    fig_spikes.update_layout(
+        title=f"SPIKES ({SIDE_TO_ANALYZE.capitalize()} Side)",
+        scene=dict(
+            xaxis_title="PC1",
+            yaxis_title="PC2",
+            zaxis_title="PC3",
+        ),
+    )
+    fig_spikes.show()
+
+### emg plot
+    fig_emg = go.Figure()
+
+    fig_emg.add_trace(
+        go.Scatter3d(
+            x=global_emg_pcs[:, 0],
+            y=global_emg_pcs[:, 1],
+            z=global_emg_pcs[:, 2],
+            mode="lines",
+            line=dict(color="black", width=4),
+            name="Global EMG",
+        )
+    )
+
+    for i, (sess_id, sess_emg_avg, W_emg, b_emg) in enumerate(
+        zip(session_ids, all_emg_cycle_avg, all_emg_W, all_emg_b)
+    ):
+        session_color = f"rgba({i * 50 % 255}, {i * 100 % 255}, {i * 150 % 255}, 0.7)"
+        sess_emg_cycle_pcs = np.matmul(sess_emg_avg[emg_fit_ix, :], W_emg) + b_emg
+
+        fig_emg.add_trace(
+            go.Scatter3d(
+                x=sess_emg_cycle_pcs[:, 0],
+                y=sess_emg_cycle_pcs[:, 1],
+                z=sess_emg_cycle_pcs[:, 2],
+                mode="lines",
+                line=dict(color=session_color, width=2),
+                name=f"{sess_id} Avg EMG",
+            )
+        )
+
+    fig_emg.update_layout(
+        title=f"EMG ({SIDE_TO_ANALYZE.capitalize()} Side)",
+        scene=dict(
+            xaxis_title="PC1",
+            yaxis_title="PC2",
+            zaxis_title="PC3",
+        ),
+    )
+    fig_emg.show()
 # %%
