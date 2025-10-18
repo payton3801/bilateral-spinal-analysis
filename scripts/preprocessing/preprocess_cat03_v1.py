@@ -35,7 +35,7 @@ nwb_cache_dir = f"/snel/share/share/tmp/scratch/pbechef/bilateral_cat/cat03/prep
 
 ds_names = ['cat03_037', 'cat03_039', 'cat03_041', 'cat03_043', 'cat03_045', 'cat03_047', 
            'cat03_051', 'cat03_053', 'cat03_055', 'cat03_057', 'cat03_059', 'cat03_061',
-           'cat03_013', 'cat03_049',]  #cat03_025 being a pain
+           'cat03_013', 'cat03_049']  #cat03_025 being a pain
 
 #saving this preprocessed data
 if not os.path.exists(nwb_cache_dir):
@@ -234,7 +234,7 @@ for name in ds_names:
     indices_to_remove = {
         'cat03_037': {
         'left':[29627],
-        'right':[21834, 16832], 
+        'right':[21834, 16832, 30223, 24182], 
         },
         'cat03_039': {
         'left':[7516],
@@ -244,17 +244,17 @@ for name in ds_names:
         'left':[10691, 24696],
         },
         'cat03_045': {
-        'left':[34052],
-        'right':[34771], 
+        'left':[34052, 26286, 35428],
+        'right':[34771, 29191], 
         },
         'cat03_047': {
         'right':[16110, 24067], 
         },
         'cat03_051': {
-        'right':[21493], 
+        'right':[21493, 18736], 
         },
         'cat03_053': {
-        'left':[27205, 22684, 17929],
+        'left':[27205, 22684, 17929, 24548],
         'right':[24299], 
         },
         'cat03_055': {
@@ -270,7 +270,7 @@ for name in ds_names:
         'right':[16230, 16172], 
         },
         'cat03_061': {
-        'left':[20895],
+        'left':[20895, 15288],
         'right':[15375, 27091], 
         },
         'cat03_013': {
@@ -278,7 +278,7 @@ for name in ds_names:
         },
         'cat03_049': {
         'left':[25060],
-        'right':[18550, 18230, 24546, 18484], 
+        'right':[18550, 18230, 24546, 18484, 24386], 
         },
     }
 
