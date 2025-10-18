@@ -33,13 +33,16 @@ handler.setFormatter(formatter)
 logger.addHandler(handler)
 
 #### picking side to analyze
-SIDE_TO_ANALYZE = "left"
+SIDE_TO_ANALYZE = "L"
 
 # %% -- iterate through files and load datasets
 nwb_cache_dir = f"/snel/share/share/tmp/scratch/pbechef/bilateral_cat/cat03/preprocessed/"
 
-ds_paths = glob.glob(os.path.join(nwb_cache_dir, "*"))
+session_to_exclude = "cat03_025_preproc"
+all_paths = glob.glob(os.path.join(nwb_cache_dir, "*"))
 
+# Create a new, filtered list of paths that does NOT contain the session to exclude
+ds_paths = [path for path in all_paths if session_to_exclude not in path]
 
 all_ds = []
 for ds_path in ds_paths:
@@ -78,7 +81,7 @@ ARRAY_SELECT = "ALL"  # which array data to model, if "ALL", use both arrays
 
 NUM_SPK_PCS = 20
 NUM_EMG_PCS = 10
-L2_SCALE = 1e-2 #1e-0
+L2_SCALE = 1e-3 #1e-0
 
 
 
@@ -86,12 +89,16 @@ L2_SCALE = 1e-2 #1e-0
 
 # -- paths
 align_file_suffix = "_low_reg"
-ds_base_name = ds_base_name = sys.argv[1] if len(sys.argv) > 1 else "default_base_name"
+ds_base_name = "cat03" #sys.argv[1] if len(sys.argv) > 1 else "default_base_name"
 
-
+# print(sys.argv[0])
+# if len(sys.argv) > 1:    
+#     print(sys.argv[1])
+    
+#import pdb; pdb.set_trace()
 # --- create save directories for PCR alignment matrices
 base_pcr_save_dir = (
-    f"/snel/share/share/tmp/scratch/pbechef/bilateral_cat/cat03/nwb_lfads/runs/{ds_base_name}/{sys.argv[1]}/"
+    f"/snel/share/share/tmp/scratch/pbechef/bilateral_cat/{ds_base_name}/nwb_lfads/runs/datasets/"
 )
 base_align_mat_dir = os.path.join(base_pcr_save_dir, "alignment_matrices")
 emg_align_mat_dir = os.path.join(base_align_mat_dir, "emg")
@@ -216,14 +223,18 @@ all_emg_cycle_data = []
 logger.info(f"analyzing {SIDE_TO_ANALYZE}")
 
 
+
 for i, dataset in enumerate(all_ds):
+
     # Filter the data for the current session
     dw = DataWrangler(dataset)
-    if SIDE_TO_ANALYZE == "left":
+    if SIDE_TO_ANALYZE == "L":
         dataset.trial_info = dataset.l_trial_info
-    elif SIDE_TO_ANALYZE == "right":
-        dataset.trial_info = dataset.r_trial_info
+    elif SIDE_TO_ANALYZE == "R":
 
+        dataset.trial_info = dataset.r_trial_info
+    side_neurons = dataset.unit_info.location.apply(lambda x: x.split(' ')[1])
+    spk_mask = [SIDE_TO_ANALYZE in side for side in side_neurons]
     
     if 'start_time' not in dataset.trial_info.columns:
         dataset.trial_info['start_time'] = dataset.trial_info['ext_start_time']
@@ -242,15 +253,20 @@ for i, dataset in enumerate(all_ds):
     emg_field = "emg_smooth_50ms"
 
     spk_cols = dataset.data[spk_field].columns
+    spk_cols = spk_cols[spk_mask]
     spk_names = [(spk_field, col) for col in spk_cols]
+    #print(spk_names)
+    #spk_names = np.array(spk_names)[spk_mask].tolist()
+    #print(spk_names)
 
     emg_cols = dataset.data[emg_field].columns
     emg_names = [(emg_field, col) for col in emg_cols]
 
-    if SIDE_TO_ANALYZE == "left":
-        emg_names = [name for name in emg_names if name[1].startswith("L")]
-    elif SIDE_TO_ANALYZE == "right":
-        emg_names = [name for name in emg_names if name[1].startswith("R")]
+    # if SIDE_TO_ANALYZE == "left":
+    #     emg_names = [name for name in emg_names if name[1].startswith("L")]
+    # elif SIDE_TO_ANALYZE == "right":
+    #     emg_names = [name for name in emg_names if name[1].startswith("R")]
+
 
     # Process spike data
     spk_cycle_avg, spk_cycle_data = aligned_cycle_averaging(
@@ -267,6 +283,7 @@ for i, dataset in enumerate(all_ds):
     emg_cycle_avg, emg_cycle_data = aligned_cycle_averaging(
         dw._t_df, dw, emg_field, field_names=emg_names
     )
+    
     emg_chan_means = np.nanmean(emg_cycle_avg, axis=0)[np.newaxis, :]
     all_emg_chan_means.append(emg_chan_means)
     all_emg_cycle_avg.append(emg_cycle_avg)
@@ -413,9 +430,9 @@ if debug:
     
     #ax2.legend()
     ax2.set_xlabel("PC1"); ax2.set_ylabel("PC2"); ax2.set_zlabel("PC3")
-    ax2.set_title(f"EMG ({SIDE_TO_ANALYZE.capitalize()} Side)") # Add side to title
+    ax2.set_title(f"EMG") 
     
-    plt.suptitle(f"Multi-session PCR Alignment ({SIDE_TO_ANALYZE.capitalize()} Side)") # Add side to suptitle
+    plt.suptitle(f"Multi-session PCR Alignment ({SIDE_TO_ANALYZE.capitalize()} Side)") 
     fig.tight_layout(rect=[0, 0.03, 1, 0.95])
 
     plt.figure()
@@ -510,7 +527,7 @@ if debug:
         )
 
     fig_emg.update_layout(
-        title=f"EMG ({SIDE_TO_ANALYZE.capitalize()} Side)",
+        title="EMG",
         scene=dict(
             xaxis_title="PC1",
             yaxis_title="PC2",
