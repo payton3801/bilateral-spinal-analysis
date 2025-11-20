@@ -1,0 +1,6 @@
+[submodule "lfads_tf2"]
+	path = lfads_tf2
+	url = https://github.com/snel-repo/lfads_tf2.git
+[submodule "tune_tf2"]
+	path = tune_tf2
+	url = https://github.com/snel-repo/tune_tf2.git
