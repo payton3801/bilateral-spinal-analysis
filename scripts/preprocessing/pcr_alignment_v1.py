@@ -1,26 +1,26 @@
-# from nlb_tools.nwb_interface import NWBDataset
-from snel_toolkit.datasets.nwb import NWBDataset
+###############################
+# this script processes the nwb datasets, preforms preprocessing on spiking/ emg data,
+# aligns data to trial events, computes cycle averages, fits pca, plots pcr, saves pcr alignment matrices
+# also, generates visualization overview plots at the end
+# ask about loading in nwb files, not preprocessed files
 
-# from rds.structures import DataWrangler
-from snel_toolkit.datasets.base import DataWrangler
-import matplotlib.pyplot as plt
-import matplotlib.cm as colormap
-from mpl_toolkits.mplot3d import Axes3D
-import numpy as np
-from sklearn.decomposition import PCA
-from sklearn.linear_model import Ridge
-from sklearn.preprocessing import StandardScaler
-from sklearn.model_selection import cross_val_score
-import scipy.signal as signal
-from os import path
-#from tqdm import tqdm
-import _pickle as pickle
-import logging
-import h5py
+# %%
 import glob
 import os
+import _pickle as pickle
+import logging
 import sys
-import yaml
+import numpy as np
+from snel_toolkit.datasets.nwb import NWBDataset 
+from snel_toolkit.datasets.base import DataWrangler
+import pandas as pd
+import h5py
+from sklearn.linear_model import Ridge
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+import matplotlib.cm as colormap
+from sklearn.decomposition import PCA
+import plotly.graph_objects as go
 
 # --- setup logger
 logger = logging.getLogger()
@@ -33,12 +33,11 @@ handler.setFormatter(formatter)
 logger.addHandler(handler)
 
 # --- handle system inputs
-ds_base_name = sys.argv[1]
-session_ids = sys.argv[2]
-session_ids = session_ids.split(",")
-session_ids[0] = session_ids[0].replace("[", "")
-session_ids[-1] = session_ids[-1].replace("]", "")
+ds_base_name = ""
+session_ids = ['cat03_013','cat03_037', 'cat03_039', 'cat03_041', 'cat03_043', 'cat03_045', 'cat03_047', 'cat03_049', 
+           'cat03_051', 'cat03_053', 'cat03_055', 'cat03_057', 'cat03_059', 'cat03_061'] 
 
+#%%
 # === begin SCRIPT PARAMETERS ==========================
 
 # -- script control options
@@ -53,7 +52,7 @@ SCALE_Q_CUTOFF = 0.95  # emg quantile to set unit scaling
 XCORR_THRESHOLD = 0.1  # spk/s
 ARRAY_SELECT = "L"  # which array data to model, if "ALL", use both arrays
 
-NUM_SPK_PCS = 20 #changed from 20
+NUM_SPK_PCS = 20
 NUM_EMG_PCS = 10
 L2_SCALE = 1e-2 #1e-0
 
@@ -63,13 +62,14 @@ model_emg_field = "model_emg"
 align_file_suffix = ""
 base_name = f"binsize_10ms_pcr_{ARRAY_SELECT}"
 #base_name = f"binsize_4ms_{ARRAY_SELECT}"
-nwb_cache_dir = "/snel/share/share/tmp/scratch/bilateral_cat/nwb_cache/post_pcr"
-
+nwb_cache_dir = f"/snel/share/share/tmp/scratch/bilateral_cat/nwb_cache"
 ds_base_dir = "/snel/share/share/derived/auyong/NWB/"
 
 # --- create save directories for PCR alignment matrices
-base_pcr_save_dir = f"/snel/share/share/tmp/scratch/bilateral_cat/nwb_lfads/runs/binsize_10ms_pcr_{ARRAY_SELECT}"
+base_pcr_save_dir = (
+    f"/snel/share/share/tmp/scratch/bilateral_cat/nwb_lfads/runs/binsize_10ms_pcr_{ARRAY_SELECT}"
 
+)
 base_align_mat_dir = os.path.join(base_pcr_save_dir, "alignment_matrices")
 emg_align_mat_dir = os.path.join(base_align_mat_dir, "emg")
 spk_align_mat_dir = os.path.join(base_align_mat_dir, "spikes")
@@ -157,8 +157,8 @@ all_emg_cycle_avg = []
 all_emg_chan_means = []
 all_ds = []
 for session_id in session_ids:
-    ds_name = f"{ds_base_name}_{session_id}"
-    ds_path = path.join(ds_base_dir, ds_name + ".nwb")
+    ds_name = f"{ds_base_name}{session_id}"
+    ds_path = os.path.join(ds_base_dir, ds_name + ".nwb")
     # --- load dataset from NWB
     logger.info(f"Loading {ds_name} from NWB")
     dataset = NWBDataset(ds_path, split_heldout=False)
@@ -221,7 +221,6 @@ for session_id in session_ids:
     fig = plt.figure(figsize=(14,5)); 
     
     savedir = f"/snel/share/share/tmp/scratch/bilateral_cat/{ds_base_name}/"
-
     plt_savedir = os.path.join(savedir, "overview") 
     if not os.path.isdir(plt_savedir):
         logger.info(f"creating {plt_savedir}")
@@ -247,12 +246,12 @@ for session_id in session_ids:
         logger.info(f"Creating {nwb_cache_dir}")
         os.makedirs(nwb_cache_dir)
     # -- dump dataset object to pickle file
-    ds_savepath = path.join(nwb_cache_dir, ds_name + "_post_pcr" + ".pkl")
+    ds_savepath = os.path.join(nwb_cache_dir, "nlb_" + ds_name + ".pkl")
     with open(ds_savepath, "wb") as rfile:
         logger.info(f"Dataset {ds_name} saved to pickle.")
         pickle.dump(dataset, rfile, protocol=4)
 
-    group_field = "condition_id"
+    #group_field = "condition_id"
     emg_field = smooth_emg_field
     spk_field = smooth_spk_field
 
@@ -312,6 +311,7 @@ global_spk_cycle_avg, global_spk_chan_means = concat_sessions(
 global_emg_cycle_avg, global_emg_chan_means = concat_sessions(
     all_emg_cycle_avg, all_emg_chan_means
 )
+
 
 # --- fit pca on global pcs
 spk_fit_ix = ~np.any(np.isnan(global_spk_cycle_avg), axis=1)
@@ -464,3 +464,4 @@ if debug:
 import pdb
 
 pdb.set_trace()
+# %%

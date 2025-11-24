@@ -42,7 +42,10 @@ session_to_exclude = "cat03_025_preproc"
 all_paths = glob.glob(os.path.join(nwb_cache_dir, "*"))
 
 # Create a new, filtered list of paths that does NOT contain the session to exclude
-ds_paths = [path for path in all_paths if session_to_exclude not in path]
+ds_paths = [
+    path for path in all_paths 
+    if not os.path.basename(path).startswith(session_to_exclude)
+]
 
 all_ds = []
 for ds_path in ds_paths:
@@ -88,8 +91,8 @@ L2_SCALE = 1e-3 #1e-0
 # %%
 
 # -- paths
-align_file_suffix = "_low_reg"
-ds_base_name = "cat03" #sys.argv[1] if len(sys.argv) > 1 else "default_base_name"
+align_file_suffix = ""
+ds_base_name = "" #sys.argv[1] if len(sys.argv) > 1 else "default_base_name"
 
 # print(sys.argv[0])
 # if len(sys.argv) > 1:    
@@ -98,7 +101,9 @@ ds_base_name = "cat03" #sys.argv[1] if len(sys.argv) > 1 else "default_base_name
 #import pdb; pdb.set_trace()
 # --- create save directories for PCR alignment matrices
 base_pcr_save_dir = (
-    f"/snel/share/share/tmp/scratch/pbechef/bilateral_cat/{ds_base_name}/nwb_lfads/runs/datasets/"
+    # f"/snel/share/share/tmp/scratch/pbechef/bilateral_cat/{ds_base_name}/nwb_lfads/runs/datasets/"
+    f"/snel/share/share/tmp/scratch/pbechef/bilateral_cat/cat03/nwb_lfads/runs/binsize_10ms_pcr_high_reg_{SIDE_TO_ANALYZE}/"
+
 )
 base_align_mat_dir = os.path.join(base_pcr_save_dir, "alignment_matrices")
 emg_align_mat_dir = os.path.join(base_align_mat_dir, "emg")
@@ -209,7 +214,7 @@ def fit_session_readins(all_avg, all_means, global_pcs, fit_ix, l2_scale=0):
 # %%
 
 nwb_cache_dir = f"/snel/share/share/tmp/scratch/pbechef/bilateral_cat/cat03/preprocessed/"
-ds_paths = glob.glob(os.path.join(nwb_cache_dir, "*"))
+#ds_paths = glob.glob(os.path.join(nwb_cache_dir, "*"))
 logger.info(f"Found {len(ds_paths)} files to process.")
 
 ################ step 1: Standardize (zero-mean)
@@ -231,7 +236,6 @@ for i, dataset in enumerate(all_ds):
     if SIDE_TO_ANALYZE == "L":
         dataset.trial_info = dataset.l_trial_info
     elif SIDE_TO_ANALYZE == "R":
-
         dataset.trial_info = dataset.r_trial_info
     side_neurons = dataset.unit_info.location.apply(lambda x: x.split(' ')[1])
     spk_mask = [SIDE_TO_ANALYZE in side for side in side_neurons]
@@ -329,7 +333,7 @@ all_emg_W, all_emg_b = fit_session_readins(
 # done using NUM_SPK_PCS and NUM_EMG_PCS above
 
 ################### Step 5: Project Session Data into Principal Component (PC) Space
-session_ids = [os.path.basename(ds_path).split('.')[0] for ds_path in ds_paths]
+session_ids = [os.path.basename(ds_path).split('.')[0].replace('_preproc', '') for ds_path in ds_paths]
 
 
 # results
@@ -351,10 +355,12 @@ if save_align_mats:
     with h5py.File(spk_filepath, "w") as hf_spk, h5py.File(emg_filepath, "w") as hf_emg:
         for i, (sess_id, W_spk, b_spk, W_emg, b_emg) in enumerate(zip(session_ids, all_spk_W, all_spk_b, all_emg_W, all_emg_b)):
 
-            ds_name = f"{ds_base_name}_{sess_id}"
-            emg_group_name = f"{lfads_dataset_prefix}_{ds_name}_emg_{BIN_SIZE}.h5"
-            spk_group_name = f"{lfads_dataset_prefix}_{ds_name}_{ARRAY_SELECT}_spikes_{BIN_SIZE}.h5"
+            ds_name = f"{ds_base_name}{sess_id}"
+            emg_group_name = f"{lfads_dataset_prefix}_{ds_name}_{SIDE_TO_ANALYZE}_emg_{BIN_SIZE}.h5"
+            spk_group_name = f"{lfads_dataset_prefix}_{ds_name}_{SIDE_TO_ANALYZE}_spikes_{BIN_SIZE}.h5"
 
+            logger.info(f"Creating EMG group: {emg_group_name}")
+            logger.info(f"Creating  Spike group: {spk_group_name}")
             
             emg_group = hf_emg.create_group(emg_group_name)
             emg_group.create_dataset("matrix", data=W_emg)
@@ -363,6 +369,9 @@ if save_align_mats:
             spk_group = hf_spk.create_group(spk_group_name)
             spk_group.create_dataset("matrix", data=W_spk)
             spk_group.create_dataset("bias", data=np.squeeze(b_spk))
+
+    
+
 
         # hf_spk.close()
         # hf_emg.close()

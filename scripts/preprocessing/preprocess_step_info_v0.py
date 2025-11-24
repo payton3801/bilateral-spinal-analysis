@@ -30,12 +30,16 @@ logger.addHandler(handler)
 # %%
 
 base_path = "/snel/share/share/derived/auyong/NWB/" 
-nwb_cache_dir = f"/snel/share/share/tmp/scratch/pbechef/bilateral_cat/cat03/preprocessed/" 
+nwb_cache_dir = "/snel/share/share/tmp/scratch/bilateral_cat/nwb_cache/step_info"
 
 
-ds_names = ['cat03_037', 'cat03_039', 'cat03_041', 'cat03_043', 'cat03_045', 'cat03_047', 
-           'cat03_051', 'cat03_053', 'cat03_055', 'cat03_057', 'cat03_059', 'cat03_061',
-           'cat03_013', 'cat03_049']  #cat03_025 being a pain
+# ds_names = ['cat03_037', 'cat03_039', 'cat03_041', 'cat03_043', 'cat03_045', 'cat03_047', 
+#            'cat03_051', 'cat03_053', 'cat03_055', 'cat03_057', 'cat03_059', 'cat03_061',
+#            'cat03_013', 'cat03_049']  #cat03_025 being a pain
+
+cat_name = sys.argv[1]
+session_id = sys.argv[2]
+name = f"{cat_name}_{session_id}"
 
 #saving this preprocessed data
 if not os.path.exists(nwb_cache_dir):
@@ -137,247 +141,248 @@ def compute_on_off_events(ds, musc_name_right , pos_threshold=0.025, neg_thresho
 
 pre_idx=800
 post_idx=700
+print("HELLLOOOO")
+print(name)
+#for name in ds_names:
+nwb_path = f"/snel/share/share/derived/auyong/NWB/{name}.nwb"
+dataset = NWBDataset(nwb_path)
+BIN_SIZE = dataset.bin_width
 
-for name in ds_names:
-    nwb_path = f"/snel/share/share/derived/auyong/NWB/{name}.nwb"
-    dataset = NWBDataset(nwb_path)
-    BIN_SIZE = dataset.bin_width
+# Apply smoothing functions
+dataset.smooth_spk(gauss_width=gauss_width_ms, signal_type=emg_name, name=f"smooth_{gauss_width_ms}ms")
+dataset.smooth_spk(gauss_width=env_emg_gauss_width_ms, signal_type=emg_name, name=f"smooth_{env_emg_gauss_width_ms}ms")
+dataset.smooth_spk(gauss_width=spk_gauss_width_ms, signal_type=spk_name, name=f"smooth_{spk_gauss_width_ms}ms")
 
-    # Apply smoothing functions
-    dataset.smooth_spk(gauss_width=gauss_width_ms, signal_type=emg_name, name=f"smooth_{gauss_width_ms}ms")
-    dataset.smooth_spk(gauss_width=env_emg_gauss_width_ms, signal_type=emg_name, name=f"smooth_{env_emg_gauss_width_ms}ms")
-    dataset.smooth_spk(gauss_width=spk_gauss_width_ms, signal_type=spk_name, name=f"smooth_{spk_gauss_width_ms}ms")
+# Compute onsets/offsets for the right and left muscles
+musc_name_right = 'RSL'
+musc_name_left = 'LSL'
 
-    # Compute onsets/offsets for the right and left muscles
-    musc_name_right = 'RSL'
-    musc_name_left = 'LSL'
+r_ext_on, r_ext_off, r_ext_db_pkg = compute_on_off_events(dataset, musc_name_right, pos_threshold=0.001, neg_threshold=0.001)
+l_ext_on, l_ext_off, l_ext_db_pkg = compute_on_off_events(dataset, musc_name_left, pos_threshold=0.001, neg_threshold=0.001)
 
-    r_ext_on, r_ext_off, r_ext_db_pkg = compute_on_off_events(dataset, musc_name_right, pos_threshold=0.001, neg_threshold=0.001)
-    l_ext_on, l_ext_off, l_ext_db_pkg = compute_on_off_events(dataset, musc_name_left, pos_threshold=0.001, neg_threshold=0.001)
+def refine_tx(tx, data, threshold, pre_idx, post_idx, tx_type="onset"):
+    """refine onset/offset calculation"""        
+    refined_tx = np.zeros_like(tx)
+    data_len = len(data.values)
+    for i, idx in enumerate(tx):
 
-    def refine_tx(tx, data, threshold, pre_idx, post_idx, tx_type="onset"):
-        """refine onset/offset calculation"""        
-        refined_tx = np.zeros_like(tx)
-        data_len = len(data.values)
-        for i, idx in enumerate(tx):
+        win = data.values[idx-pre_idx:idx+post_idx]
+        start_idx = max(0, idx- pre_idx)
+        end_idx = (data_len, post_idx + idx)
+        if len(win) < pre_idx + post_idx:
+            raise ValueError("window size too small for index {idx}. fix pre or post idx")
 
-            win = data.values[idx-pre_idx:idx+post_idx]
-            start_idx = max(0, idx- pre_idx)
-            end_idx = (data_len, post_idx + idx)
-            if len(win) < pre_idx + post_idx:
-                raise ValueError("window size too small for index {idx}. fix pre or post idx")
-
-            if tx_type == "onset":
-                cross_pts = np.where(np.diff(np.sign(win-threshold)) > 0)[0]
-            elif tx_type == "offset":
-                cross_pts = np.where(np.diff(np.sign(win-threshold)) < 0)[0]
-            else:
-                raise NotImplementedError("tx_type must be onset or offset")
-            
-            if len(cross_pts) == 0:
-                raise ValueError(f"No crossing point found for index {idx} of {name}, check threshold {threshold} and window min {np.min(win)}")
-            cross_idx = cross_pts[0]
-            shift = cross_idx - pre_idx
-            refined_tx[i] = tx[i] + shift
+        if tx_type == "onset":
+            cross_pts = np.where(np.diff(np.sign(win-threshold)) > 0)[0]
+        elif tx_type == "offset":
+            cross_pts = np.where(np.diff(np.sign(win-threshold)) < 0)[0]
+        else:
+            raise NotImplementedError("tx_type must be onset or offset")
         
-        return refined_tx
+        if len(cross_pts) == 0:
+            raise ValueError(f"No crossing point found for index {idx} of {name}, check threshold {threshold} and window min {np.min(win)}")
+        cross_idx = cross_pts[0]
+        shift = cross_idx - pre_idx
+        refined_tx[i] = tx[i] + shift
     
-    def plot_aligned_win(ax, tx, data, pre_idx, post_idx, title=None):
-        cmap = cm.get_cmap('rainbow', len(tx))  
-        
-        for i, t in enumerate(tx):
-            win = data.values[t-pre_idx:t+post_idx]
-            color = cmap(i)   # pick distinct color
-            ax.plot(win, color=color, label=f"Index: {t}")      
-        if title is not None:
-            ax.set_title(title)
-    # Create subplots
-        ax.legend(loc = "upper right", fontsize = "small")
-    fig, axes = plt.subplots(2, 2, figsize=(16, 12), dpi=150)
+    return refined_tx
 
-   ## -- refine onsets -- left 
-    if name in ['cat03_039', 'cat03_043', "cat03_013"]:
-        threshold = 0.4
-    elif name == 'cat03_025':
-        threshold = 1.1
-
-    else:
-        threshold = 0.2  
-  
-    refined_on_l = refine_tx(l_ext_on, l_ext_db_pkg['data'], threshold, pre_idx, post_idx, tx_type="onset")
-
-    # -- refine onsets -- right
-    if name == 'cat03_037':
-        threshold = 0.5
-    elif name in ['cat03_043', 'cat03_025']:
-        threshold = 0.15
-    elif name == "cat03_013":
-        threshold = 0.4
+def plot_aligned_win(ax, tx, data, pre_idx, post_idx, title=None):
+    cmap = cm.get_cmap('rainbow', len(tx))  
     
-    else:
-        threshold = 0.3
-    refined_on_r = refine_tx(r_ext_on, r_ext_db_pkg['data'], threshold, pre_idx, post_idx, tx_type="onset")
+    for i, t in enumerate(tx):
+        win = data.values[t-pre_idx:t+post_idx]
+        color = cmap(i)   # pick distinct color
+        ax.plot(win, color=color, label=f"Index: {t}")      
+    if title is not None:
+        ax.set_title(title)
+# Create subplots
+    ax.legend(loc = "upper right", fontsize = "small")
+fig, axes = plt.subplots(2, 2, figsize=(16, 12), dpi=150)
 
-    # -- refine offsets -- left    
-    if name in ['cat03_039', 'cat03_043', 'cat03_025']:
-        threshold = 0.3
-    elif name == "cat03_013":
-        threshold = 0.4
-    else:
-        threshold = 0.2
-    #break
-    refined_off_l = refine_tx(l_ext_off, l_ext_db_pkg['data'], threshold, pre_idx, post_idx, tx_type="offset")
-    # -- refine offsets -- right 
-    refined_off_r = refine_tx(r_ext_off, r_ext_db_pkg['data'], threshold, pre_idx, post_idx, tx_type="offset")
+## -- refine onsets -- left 
+if name in ['cat03_039', 'cat03_043', "cat03_013"]:
+    threshold = 0.4
+elif name == 'cat03_025':
+    threshold = 1.1
 
-  # indices removal
-    indices_to_remove = {
-        'cat03_037': {
-        'left':[29627],
-        'right':[21834, 16832, 30223, 24182], 
-        },
-        'cat03_039': {
-        'left':[7516],
-        'right':[19415], 
-        },
-        'cat03_041': {
-        'left':[10691, 24696],
-        },
-        'cat03_045': {
-        'left':[34052, 26286, 35428],
-        'right':[34771, 29191], 
-        },
-        'cat03_047': {
-        'right':[16110, 24067], 
-        },
-        'cat03_051': {
-        'right':[21493, 18736], 
-        },
-        'cat03_053': {
-        'left':[27205, 22684, 17929, 24548],
-        'right':[24299], 
-        },
-        'cat03_055': {
-        'left':[11447],
-        'right':[26498], 
-        },
-        'cat03_057': {
-        'left':[17199],
-        'right':[ 30934], 
-        },
-        'cat03_059': {
-        'left':[11295, 14552],
-        'right':[16230, 16172], 
-        },
-        'cat03_061': {
-        'left':[20895, 15288],
-        'right':[15375, 27091], 
-        },
-        'cat03_013': {
-        'left':[11637],
-        },
-        'cat03_049': {
-        'left':[25060],
-        'right':[18550, 18230, 24546, 18484, 24386], 
-        },
-    }
+else:
+    threshold = 0.2  
 
-        
-    if name in indices_to_remove:
-        remove_indices_left = indices_to_remove[name].get('left', [])
-        remove_indices_right = indices_to_remove[name].get('right', [])
-        remove_indices = indices_to_remove[name]
+refined_on_l = refine_tx(l_ext_on, l_ext_db_pkg['data'], threshold, pre_idx, post_idx, tx_type="onset")
 
-        mask_on_l = ~np.isin(refined_on_l, remove_indices_left)
-        mask_off_l = ~np.isin(refined_off_l, remove_indices_left)
-        
-        # Apply the masks to remove the indices for left side
-        refined_on_l = refined_on_l[mask_on_l]
-        refined_off_l = refined_off_l[mask_off_l]
-        
-        mask_on_r = ~np.isin(refined_on_r, remove_indices_right)
-        mask_off_r = ~np.isin(refined_off_r, remove_indices_right)
-        
-        refined_on_r = refined_on_r[mask_on_r]
-        refined_off_r = refined_off_r[mask_off_r]
+# -- refine onsets -- right
+if name == 'cat03_037':
+    threshold = 0.5
+elif name in ['cat03_043', 'cat03_025']:
+    threshold = 0.15
+elif name == "cat03_013":
+    threshold = 0.4
 
+else:
+    threshold = 0.3
+refined_on_r = refine_tx(r_ext_on, r_ext_db_pkg['data'], threshold, pre_idx, post_idx, tx_type="onset")
 
-    plot_aligned_win(axes[0,0], refined_on_l, l_ext_db_pkg['data'], pre_idx, post_idx, title=f"{name} L Onset")
-    plot_aligned_win(axes[0,1], refined_on_r, r_ext_db_pkg['data'], pre_idx, post_idx, title=f"{name} R Onset")
-    plot_aligned_win(axes[1,0], refined_off_l, l_ext_db_pkg['data'], pre_idx, post_idx, title=f"{name} L Offset")
-    plot_aligned_win(axes[1,1], refined_off_r, r_ext_db_pkg['data'], pre_idx, post_idx, title=f"{name} R Offset")
-    
-    for ax in axes.flatten():
-        ax.spines['top'].set_visible(False)
-        ax.spines['right'].set_visible(False)
+# -- refine offsets -- left    
+if name in ['cat03_039', 'cat03_043', 'cat03_025']:
+    threshold = 0.3
+elif name == "cat03_013":
+    threshold = 0.4
+else:
+    threshold = 0.2
+#break
+refined_off_l = refine_tx(l_ext_off, l_ext_db_pkg['data'], threshold, pre_idx, post_idx, tx_type="offset")
+# -- refine offsets -- right 
+refined_off_r = refine_tx(r_ext_off, r_ext_db_pkg['data'], threshold, pre_idx, post_idx, tx_type="offset")
+
+# indices removal
+indices_to_remove = {
+    'cat03_037': {
+    'left':[29627],
+    'right':[21834, 16832, 30223, 24182], 
+    },
+    'cat03_039': {
+    'left':[7516],
+    'right':[19415], 
+    },
+    'cat03_041': {
+    'left':[10691, 24696],
+    },
+    'cat03_045': {
+    'left':[34052, 26286, 35428],
+    'right':[34771, 29191], 
+    },
+    'cat03_047': {
+    'right':[16110, 24067], 
+    },
+    'cat03_051': {
+    'right':[21493, 18736], 
+    },
+    'cat03_053': {
+    'left':[27205, 22684, 17929, 24548],
+    'right':[24299], 
+    },
+    'cat03_055': {
+    'left':[11447],
+    'right':[26498], 
+    },
+    'cat03_057': {
+    'left':[17199],
+    'right':[ 30934], 
+    },
+    'cat03_059': {
+    'left':[11295, 14552],
+    'right':[16230, 16172], 
+    },
+    'cat03_061': {
+    'left':[20895, 15288],
+    'right':[15375, 27091], 
+    },
+    'cat03_013': {
+    'left':[11637],
+    },
+    'cat03_049': {
+    'left':[25060],
+    'right':[18550, 18230, 24546, 18484, 24386], 
+    },
+}
 
     
-    #make trial_info for left and right sides
-    def make_trial_info(ds, refined_on, refined_off):
-        # -- make l trial_info
-        trial_id = []
-        condition_id = []
-        on_times = []
-        off_times = []
-        for i, (on_ix, off_ix) in enumerate(zip(refined_on, refined_off)):
-            on_times.append(ds.data.index[on_ix])
-            off_times.append(ds.data.index[off_ix])
-            trial_id.append(i)
-            condition_id.append(1)
-        trial_info = pd.DataFrame([trial_id, condition_id, on_times, off_times]).T
-        trial_info.columns = ['trial_id', 'condition_id', 'ext_start_time', 'ext_stop_time']
-        return trial_info
+if name in indices_to_remove:
+    remove_indices_left = indices_to_remove[name].get('left', [])
+    remove_indices_right = indices_to_remove[name].get('right', [])
+    remove_indices = indices_to_remove[name]
 
-    l_trial_info = make_trial_info(dataset, refined_on_l, refined_off_l)
-    r_trial_info = make_trial_info(dataset, refined_on_r, refined_off_r)
+    mask_on_l = ~np.isin(refined_on_l, remove_indices_left)
+    mask_off_l = ~np.isin(refined_off_l, remove_indices_left)
     
+    # Apply the masks to remove the indices for left side
+    refined_on_l = refined_on_l[mask_on_l]
+    refined_off_l = refined_off_l[mask_off_l]
+    
+    mask_on_r = ~np.isin(refined_on_r, remove_indices_right)
+    mask_off_r = ~np.isin(refined_off_r, remove_indices_right)
+    
+    refined_on_r = refined_on_r[mask_on_r]
+    refined_off_r = refined_off_r[mask_off_r]
 
-    dataset.l_trial_info = l_trial_info
-    dataset.r_trial_info = r_trial_info
 
-    save_filename = f"{name}_preproc.pkl"
-    pkl_save_path = os.path.join(nwb_cache_dir, save_filename)
-    with open(pkl_save_path, 'wb') as f:
-        logger.info(f"Saving {pkl_save_path} to pickle.")
-        pickle.dump(dataset, f)
+plot_aligned_win(axes[0,0], refined_on_l, l_ext_db_pkg['data'], pre_idx, post_idx, title=f"{name} L Onset")
+plot_aligned_win(axes[0,1], refined_on_r, r_ext_db_pkg['data'], pre_idx, post_idx, title=f"{name} R Onset")
+plot_aligned_win(axes[1,0], refined_off_l, l_ext_db_pkg['data'], pre_idx, post_idx, title=f"{name} L Offset")
+plot_aligned_win(axes[1,1], refined_off_r, r_ext_db_pkg['data'], pre_idx, post_idx, title=f"{name} R Offset")
+
+for ax in axes.flatten():
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+
+
+#make trial_info for left and right sides
+def make_trial_info(ds, refined_on, refined_off):
+    # -- make l trial_info
+    trial_id = []
+    condition_id = []
+    on_times = []
+    off_times = []
+    for i, (on_ix, off_ix) in enumerate(zip(refined_on, refined_off)):
+        on_times.append(ds.data.index[on_ix])
+        off_times.append(ds.data.index[off_ix])
+        trial_id.append(i)
+        condition_id.append(1)
+    trial_info = pd.DataFrame([trial_id, condition_id, on_times, off_times]).T
+    trial_info.columns = ['trial_id', 'condition_id', 'ext_start_time', 'ext_stop_time']
+    return trial_info
+
+l_trial_info = make_trial_info(dataset, refined_on_l, refined_off_l)
+r_trial_info = make_trial_info(dataset, refined_on_r, refined_off_r)
+
+
+dataset.l_trial_info = l_trial_info
+dataset.r_trial_info = r_trial_info
+
+save_filename = f"{name}_step_info.pkl"
+pkl_save_path = os.path.join(nwb_cache_dir, save_filename)
+with open(pkl_save_path, 'wb') as f:
+    logger.info(f"Saving {pkl_save_path} to pickle.")
+    pickle.dump(dataset, f)
 
 
 # %%
 ## plotting flexor and extensor muscle plots
-for name in ds_names:
+# for name in ds_names:
     
-    save_filename = f"{name}_preproc.pkl"
-    pkl_save_path = os.path.join(nwb_cache_dir, save_filename)
+#     save_filename = f"{name}_preproc.pkl"
+#     pkl_save_path = os.path.join(nwb_cache_dir, save_filename)
 
-    with open(pkl_save_path, 'rb') as f:
-        dataset = pickle.load(f)
+#     with open(pkl_save_path, 'rb') as f:
+#         dataset = pickle.load(f)
 
-    ext = dataset.data[emg_field]["RBA"].values
-    flex = dataset.data[emg_field]["LSL"].values
+ext = dataset.data[emg_field]["RBA"].values
+flex = dataset.data[emg_field]["LSL"].values
 
-    refined_on_r = [dataset.data.index.get_loc(ts) for ts in dataset.r_trial_info['ext_start_time'].values]
-    refined_off_r = [dataset.data.index.get_loc(ts) for ts in dataset.r_trial_info['ext_stop_time'].values]
+refined_on_r = [dataset.data.index.get_loc(ts) for ts in dataset.r_trial_info['ext_start_time'].values]
+refined_off_r = [dataset.data.index.get_loc(ts) for ts in dataset.r_trial_info['ext_stop_time'].values]
 
-    flex_shift = ext + 2
-    x = np.arange(len(ext))
+flex_shift = ext + 2
+x = np.arange(len(ext))
 
 
-    plt.figure(figsize=(12,5))
-    plt.plot(x, ext, color="orange", label = "extensor")
-    plt.plot(x, flex + flex_shift, color = "blue", label = "flexor")
+plt.figure(figsize=(12,5))
+plt.plot(x, ext, color="orange", label = "extensor")
+plt.plot(x, flex + flex_shift, color = "blue", label = "flexor")
 
-    on_x = [ix for ix in refined_on_r if 0 <= ix < len(x)]
-    off_x = [ix for ix in refined_off_r if 0 <= ix < len(x)]
+on_x = [ix for ix in refined_on_r if 0 <= ix < len(x)]
+off_x = [ix for ix in refined_off_r if 0 <= ix < len(x)]
 
-    plt.vlines(on_x, ymin = np.nanmin(ext), ymax= np.nanmax(flex + flex_shift), color = "g", linestyle = "--", alpha = 0.6, label = "Onset")
-    plt.vlines(off_x, ymin = np.nanmin(ext), ymax = np.nanmax(flex + flex_shift), color = "b", linestyle = "--", alpha = 0.6, label = "Offset")
+plt.vlines(on_x, ymin = np.nanmin(ext), ymax= np.nanmax(flex + flex_shift), color = "g", linestyle = "--", alpha = 0.6, label = "Onset")
+plt.vlines(off_x, ymin = np.nanmin(ext), ymax = np.nanmax(flex + flex_shift), color = "b", linestyle = "--", alpha = 0.6, label = "Offset")
 
-    plt.title(f"{name} Muscle activity w/ onset and offset")
-    plt.xlabel("Time")
-    plt.ylabel("Amplitude")
-    plt.legend()
-    plt.tight_layout()
-    plt.show()
+plt.title(f"{name} Muscle activity w/ onset and offset")
+plt.xlabel("Time")
+plt.ylabel("Amplitude")
+plt.legend()
+plt.tight_layout()
+#plt.show()
 
 
 # %%

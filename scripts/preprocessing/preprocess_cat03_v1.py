@@ -1,4 +1,6 @@
 # %%
+#see proprocss step info
+
 from snel_toolkit.datasets.nwb import NWBDataset
 from snel_toolkit.datasets.base import DataWrangler
 import matplotlib.pyplot as plt
@@ -15,6 +17,8 @@ import logging
 import sys
 import matplotlib.cm as cm
 import matplotlib.colors as mcolors
+
+
 
 # %%
 # --- setup logger -- these give more info than print statements

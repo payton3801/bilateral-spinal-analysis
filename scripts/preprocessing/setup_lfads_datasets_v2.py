@@ -1,3 +1,9 @@
+
+# %%
+
+#######################################
+
+
 import sys
 import os
 import h5py
@@ -13,8 +19,6 @@ import yaml
 import numpy as np
 import pandas as pd
 
-#make sure
-
 # --- setup logger
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -26,23 +30,22 @@ handler.setFormatter(formatter)
 logger.addHandler(handler)
 
 # --- handle system inputs
-# ds_names = ['cat03_037', 'cat03_039', 'cat03_041', 'cat03_043', 'cat03_045', 'cat03_047', 
-#            'cat03_051', 'cat03_053', 'cat03_055', 'cat03_057', 'cat03_059', 'cat03_061',
-#            'cat03_013', 'cat03_049']
-# for name in ds_names:
-#     ds_name = f"cat03_{name}"
-ds_name = "cat03"
+cat_name = sys.argv[1]
+session_id = sys.argv[2]
+name = f"{cat_name}_{session_id}"
 
+spk_field = "spikes_smooth_30ms"
+emg_field = "emg_smooth_50ms"
 
 # === begin SCRIPT PARAMETERS ==========================
 
 lfads_dataset_cfg = [
     {
         "DATASET": {
-            "NAME": ds_name,
+            "NAME": "cat03",
             "CONDITION_SEP_FIELD": None,  # continuous
             "ALIGN_LIMS": None,
-            "ARRAY_SELECT": "R",  # 'R', 'L', 'ALL'
+            "ARRAY_SELECT": "L",  # 'R', 'L'
             "BIN_SIZE": 10, # 4,
             "SPK_KEEP_THRESHOLD": None,  # 15,
             "SPK_XCORR_THRESHOLD": 0.1,
@@ -56,10 +59,10 @@ lfads_dataset_cfg = [
     },
     {
         "CHOP_PARAMETERS": {
-            "TYPE": "emg",
-            "DATA_FIELDNAME": "model_emg",
-            #"TYPE": "spikes",
-            #"DATA_FIELDNAME": "spikes",
+            #"TYPE": "emg",
+            #"DATA_FIELDNAME": "model_emg",
+            "TYPE": "spikes",
+            "DATA_FIELDNAME": "spikes",
             "USE_EXT_INPUT": False,
             "EXT_INPUT_FIELDNAME": "",
             "WINDOW": 1000,  # ms
@@ -74,19 +77,27 @@ lfads_dataset_cfg = [
 
 # -- paths
 base_name = (
-    f"binsize_10ms_pcr_high_reg_{lfads_dataset_cfg[0]['DATASET']['ARRAY_SELECT']}"
+    f"binsize_10ms_pcr_{lfads_dataset_cfg[0]['DATASET']['ARRAY_SELECT']}"
 )
-#ds_base_dir = "/snel/share/share/derived/auyong/NWB/"
-lfads_save_dir = '/snel/share/share/tmp/scratch/pbechef/bilateral_cat/cat03/nwb_lfads/runs/datasets'
-cache_dir = '/snel/share/share/tmp/scratch/pbechef/bilateral_cat/cat03/preprocessed/'
+
+# --- CHANGE 1: Point to the directory where Script 1 saved the .pkl files ---
+preproc_dir = "/snel/share/share/tmp/scratch/bilateral_cat/nwb_cache/step_info" 
+lfads_save_dir = f"/snel/share/share/tmp/scratch/bilateral_cat/nwb_lfads/runs/{base_name}/datasets/"
 
 # === end SCRIPT PARAMETERS ==========================
 
+    
+# --- CHANGE 2: Load the pickle file instead of the raw NWB ---
+pkl_path = os.path.join(preproc_dir, f"{name}_step_info.pkl")
 
-ds_path = os.path.join(ds_base_dir, ds_name + ".nwb")
-# --- load dataset from NWB
-logger.info(f"Loading {ds_name} from NWB")
-dataset = NWBDataset(ds_path, split_heldout=False)
+logger.info(f"Loading preprocessed pickle for {name}")
+
+if not os.path.exists(pkl_path):
+    logger.error(f"Pickle file not found: {pkl_path}")
+    sys.exit(1) 
+    
+with open(pkl_path, 'rb') as f:
+    dataset = pickle.load(f)
 
 
 # --- preprocess spiking data
@@ -96,22 +107,27 @@ def generate_spk_keep_chan_mask(dataset, array_select, xcorr_threshold):
     and pairwise corr threshold
     """
 
-    # -- generate mask to select which neurons to include in analysis
-    spk_keep_mask = np.array(
-        [array_select in val for val in dataset.unit_info.group_name.values]
-    )
-    if array_select == "ALL":
-        spk_keep_mask[:] = True
+    # --- CHANGE 3: Assign trial info from the loaded pickle object based on selection ---
+    if ARRAY_SELECT == "L":
+        spk_keep_mask = np.array(["L side" in loc for loc in dataset.unit_info['location'].values.astype(str)])
+        # The pickle already has l_trial_info calculated
+        if hasattr(dataset, 'l_trial_info'):
+            dataset.trial_info = dataset.l_trial_info
+        else:
+            logger.warning("l_trial_info not found in dataset object!")
 
-    if SIDE_TO_ANALYZE == "L":
-        dataset.trial_info = dataset.l_trial_info
-    elif SIDE_TO_ANALYZE == "R":
+    elif ARRAY_SELECT == "R":
+        spk_keep_mask = np.array(["R side" in loc for loc in dataset.unit_info['location'].values.astype(str)])
+        # The pickle already has r_trial_info calculated
+        if hasattr(dataset, 'r_trial_info'):
+            dataset.trial_info = dataset.r_trial_info
+        else:
+            logger.warning("r_trial_info not found in dataset object!")
 
-        dataset.trial_info = dataset.r_trial_info
-    side_neurons = dataset.unit_info.location.apply(lambda x: x.split(' ')[1])
-    spk_keep_mask = np.array([SIDE_TO_ANALYZE in side for side in side_neurons]) #make array, spk_keep_mask
+    else:
+        raise ValueError(f"ARRAY_SELECT must be R, L")
 
-    # --- xcorr rejection
+    # --- xcorr rejection -- rejecting channels with high cross correlation
     # check that analysis is happening at 1ms
     assert dataset.bin_width == 1
     pair_xcorr, chan_names_to_drop = dataset.get_pair_xcorr(
@@ -143,16 +159,12 @@ if dataset.bin_width != BIN_SIZE:
 
 chop_df = dataset.data
 
-# -- drop spk channels ##follow logic from og code
-spk_cols = dataset.data[spk_field].columns
-spk_cols = spk_cols[spk_mask]
-spk_names = [(spk_field, col) for col in spk_cols]
+# -- drop spk channels
+spk_names = dataset.data.spikes.columns.values
 drop_spk_names = spk_names[~spk_keep_mask]
-
 logger.info(f"Keep spike channels: {np.sum(spk_keep_mask)}/{spk_keep_mask.size}")
 if type(np.any(drop_spk_names)) == int:
     chop_df.drop(columns=drop_spk_names.tolist(), axis=1, level=1, inplace=True)
-
 
 # --- preprocess EMG
 
@@ -231,24 +243,24 @@ interface = LFADSInterface(
 )
 if TYPE == "emg":
     chan_keep_mask = emg_keep_mask.tolist()
-    ds_name = "lfads_" + NAME + "_" + TYPE + "_" + str(BIN_SIZE) + ".h5"
-    yaml_name = "cfg_" + NAME + "_" + TYPE + "_" + str(BIN_SIZE) + ".yaml"
+    ds_name = "lfads_" + name + "_" + TYPE + "_" + str(BIN_SIZE) + ".h5"
+    yaml_name = "cfg_" + name + "_" + TYPE + "_" + str(BIN_SIZE) + ".yaml"
     INTERFACE_FILE = os.path.join(
         pkl_dir,
-        NAME + "_" + TYPE + "_" + str(BIN_SIZE) + "_interface.pkl",
+        name + "_" + TYPE + "_" + str(BIN_SIZE) + "_interface.pkl",
     )
 
 elif chop_cfg["TYPE"] == "spikes":
     chan_keep_mask = spk_keep_mask.tolist()
     ds_name = (
-        "lfads_" + NAME + "_" + ARRAY_SELECT + "_" + TYPE + "_" + str(BIN_SIZE) + ".h5"
+        "lfads_" + name + "_" + ARRAY_SELECT + "_" + TYPE + "_" + str(BIN_SIZE) + ".h5"
     )
     yaml_name = (
-        "cfg_" + NAME + "_" + ARRAY_SELECT + "_" + TYPE + "_" + str(BIN_SIZE) + ".yaml"
+        "cfg_" + name + "_" + ARRAY_SELECT + "_" + TYPE + "_" + str(BIN_SIZE) + ".yaml"
     )
     INTERFACE_FILE = os.path.join(
         pkl_dir,
-        NAME + "_" + ARRAY_SELECT + "_" + TYPE + "_" + str(BIN_SIZE) + "_interface.pkl",
+        name + "_" + ARRAY_SELECT + "_" + TYPE + "_" + str(BIN_SIZE) + "_interface.pkl",
     )
 
 lfads_dataset_cfg[0]["DATASET"]["CHAN_KEEP_MASK"] = chan_keep_mask
@@ -271,3 +283,5 @@ with open(YAML_FILE, "w") as yamlfile:
 with open(INTERFACE_FILE, "wb") as rfile:
     logger.info(f"Interface {INTERFACE_FILE} saved to pickle.")
     pickle.dump(interface, rfile)
+
+# %%
