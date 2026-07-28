@@ -55,7 +55,7 @@ print(f"Found {len(valid_sessions)} valid sessions for alignment.")
 sessions_arg = f"[{','.join(valid_sessions)}]"
 
 # 5. Construct and Run the command ONCE
-cmd = f"python pcr_alignment_v2.py {cat_name} {sessions_arg}"
+cmd = f"python pcr_alignment_v3.py {cat_name} {sessions_arg}"
 
 try:
     subprocess.run(shlex.split(cmd), check=True)

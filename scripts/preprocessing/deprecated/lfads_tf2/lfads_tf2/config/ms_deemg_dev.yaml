@@ -1,0 +1,55 @@
+MODEL:
+  DATA_DIM: 30 # overwritten
+  EXT_INPUT_DIM: 0
+  EXT_INPUT_READIN_DIM: -1
+  READIN_DIM: -1 # use readin
+  READIN_PCR_INIT: False # init from file
+  READIN_FREEZE: False
+  READOUT_FREEZE: False 
+  SEQ_LEN: 50
+  RECON_TYPE: 'Poisson' # <-- CHANGE OUTPUT DIST HERE
+  IC_ENC_DIM: 100
+  CI_ENC_DIM: 100
+  CON_DIM: 100
+  CO_DIM: 10
+  IC_DIM: 20
+  GEN_DIM: 100
+  FAC_DIM: 20
+  DROPOUT_RATE: 0.1 # PBT
+  CD_RATE: 0.5 # PBT
+  GEN_CELL_TYPE: 'gru'
+TRAIN:
+  DATA:
+    DIR: ''
+    PREFIX: lfads
+    AUGMENT:
+      TYPE: 'Jitter'
+      TEMPORAL_SHIFT: 0
+      TEMPORAL_SHIFT_DIST: normal
+      JITTER_WIDTH: 0
+  PATIENCE: 10000
+  BATCH_SIZE: 128
+  MAX_EPOCHS: 10000
+  MAX_GRAD_NORM: 200.0       
+  ADAM_EPSILON: 1.0e-8
+  LR: 
+    INIT: 1.0e-3 # PBT
+    STOP: 1.0e-10
+    DECAY: 1.0
+  L2:
+    INCREASE_EPOCH: 10
+    GEN_SCALE: 1.0e-6 # PBT
+    CON_SCALE: 1.0e-6 # PBT
+    CON_SCALE: 1.0e-6 # PBT
+    READIN_SCALE: 1.0e-6
+    EXT_INPUT_READIN_SCALE: 0.0 # PBT
+  KL:
+    INCREASE_EPOCH: 10
+    IC_WEIGHT: 1.0e-6 # PBT
+    CO_WEIGHT:  1.0e-6 # PBT
+  TUNE_MODE: True
+  OVERWRITE: True
+  PBT_MODE: True
+  EAGER_MODE: False 
+  USE_TB: False
+  MODEL_DIR: ~/tmp/lfads_tf2/nomad

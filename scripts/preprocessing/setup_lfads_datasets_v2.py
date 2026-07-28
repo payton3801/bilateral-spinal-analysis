@@ -2,8 +2,10 @@
 # %%
 
 #######################################
+# 1. filters, scales, clips channels
+# 2. chops into windows
 
-
+########################################
 import sys
 import os
 import h5py
@@ -45,7 +47,7 @@ lfads_dataset_cfg = [
             "NAME": "cat03",
             "CONDITION_SEP_FIELD": None,  # continuous
             "ALIGN_LIMS": None,
-            "ARRAY_SELECT": "L",  # 'R', 'L'
+            "ARRAY_SELECT": "ALL",  # 'R', 'L', or 'ALL'            
             "BIN_SIZE": 10, # 4,
             "SPK_KEEP_THRESHOLD": None,  # 15,
             "SPK_XCORR_THRESHOLD": 0.1,
@@ -59,10 +61,10 @@ lfads_dataset_cfg = [
     },
     {
         "CHOP_PARAMETERS": {
-            #"TYPE": "emg",
-            #"DATA_FIELDNAME": "model_emg",
-            "TYPE": "spikes",
-            "DATA_FIELDNAME": "spikes",
+            "TYPE": "emg",
+            "DATA_FIELDNAME": "model_emg",
+            #"TYPE": "spikes",
+            #"DATA_FIELDNAME": "spikes",
             "USE_EXT_INPUT": False,
             "EXT_INPUT_FIELDNAME": "",
             "WINDOW": 1000,  # ms
@@ -107,7 +109,6 @@ def generate_spk_keep_chan_mask(dataset, array_select, xcorr_threshold):
     and pairwise corr threshold
     """
 
-    # --- CHANGE 3: Assign trial info from the loaded pickle object based on selection ---
     if ARRAY_SELECT == "L":
         spk_keep_mask = np.array(["L side" in loc for loc in dataset.unit_info['location'].values.astype(str)])
         # The pickle already has l_trial_info calculated
@@ -124,8 +125,11 @@ def generate_spk_keep_chan_mask(dataset, array_select, xcorr_threshold):
         else:
             logger.warning("r_trial_info not found in dataset object!")
 
+    elif ARRAY_SELECT == "ALL":
+        spk_keep_mask = np.ones(len(dataset.unit_info['location']), dtype=bool)  # Keep all channels
+
     else:
-        raise ValueError(f"ARRAY_SELECT must be R, L")
+        raise ValueError(f"ARRAY_SELECT must be 'R', 'L', or 'ALL'")
 
     # --- xcorr rejection -- rejecting channels with high cross correlation
     # check that analysis is happening at 1ms

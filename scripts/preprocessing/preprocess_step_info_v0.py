@@ -1,3 +1,7 @@
+#######################
+#smooths raw EMG data, detects and refines muscle onsets and offsets, 
+# and saves the resulting step timings
+########################
 # %%
 from snel_toolkit.datasets.nwb import NWBDataset
 from snel_toolkit.datasets.base import DataWrangler
@@ -141,7 +145,6 @@ def compute_on_off_events(ds, musc_name_right , pos_threshold=0.025, neg_thresho
 
 pre_idx=800
 post_idx=700
-print("HELLLOOOO")
 print(name)
 #for name in ds_names:
 nwb_path = f"/snel/share/share/derived/auyong/NWB/{name}.nwb"
@@ -333,9 +336,25 @@ def make_trial_info(ds, refined_on, refined_off):
     trial_info.columns = ['trial_id', 'condition_id', 'ext_start_time', 'ext_stop_time']
     return trial_info
 
-l_trial_info = make_trial_info(dataset, refined_on_l, refined_off_l)
-r_trial_info = make_trial_info(dataset, refined_on_r, refined_off_r)
+def sort_and_reorder_steps(trial_info):
+    # Combine start and stop times into a single series
+    combined_times = pd.concat([
+        trial_info['ext_start_time'], 
+        trial_info['ext_stop_time']
+    ]).sort_values().reset_index(drop=True)
+    
+    # Reassign start and stop times in alternating order
+    trial_info['ext_start_time'] = combined_times.iloc[::2].reset_index(drop=True)
+    trial_info['ext_stop_time'] = combined_times.iloc[1::2].reset_index(drop=True)
+    
+    return trial_info
 
+
+l_trial_info = make_trial_info(dataset, refined_on_l, refined_off_l)
+r_trial_info = make_trial_info(dataset, refined_on_r, refined_off_r)   
+
+l_trial_info = sort_and_reorder_steps(l_trial_info)
+r_trial_info = sort_and_reorder_steps(r_trial_info)
 
 dataset.l_trial_info = l_trial_info
 dataset.r_trial_info = r_trial_info

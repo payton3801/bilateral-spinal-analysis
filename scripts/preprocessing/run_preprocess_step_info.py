@@ -1,5 +1,5 @@
 #puts all sessions into a list to reference, also uses proper argv naming
-
+# %%
 import glob
 import subprocess
 import shlex
@@ -50,6 +50,8 @@ for sess_num in session_nums:
         cmd = f"python preprocess_step_info_v0.py {cat_name} {sess_num}"
         subprocess.run(shlex.split(cmd))
 
+
 import pdb
 
 pdb.set_trace()
+# %%
